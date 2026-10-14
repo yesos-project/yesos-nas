@@ -1,0 +1,28 @@
+[package]
+name = "yesos"
+version = "0.1.0"
+edition = "2021"
+description = "YesOS NAS - Rust part: TCP, TLS 1.3, HTTP/WebDAV, admin panel, Noise NK channel"
+
+# The one staticlib of this product: the core crate plus this product's modules.
+[lib]
+name = "yesos"
+crate-type = ["staticlib"]
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
+codegen-units = 1
+
+[dependencies]
+yesos_core = { path = "../core/rust" }
+zeroize = { version = "1", default-features = false }
+chacha20poly1305 = { version = "0.10", default-features = false }
+curve25519-dalek = { version = "4", default-features = false }
+snow = { version = "0.10", default-features = false, features = ["default-resolver", "use-chacha20poly1305", "use-blake2", "use-curve25519"] }
+rustls = { version = "0.23", default-features = false }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "arithmetic"] }
+sha2 = { version = "0.10", default-features = false }
+hmac = { version = "0.12", default-features = false }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }

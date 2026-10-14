@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YesOS NAS</title>
+<link rel="stylesheet" href="/admin/app.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" class="icon-btn" aria-label="Menú">&#9776;</button>
+  <div class="brand">
+    <span class="brand-mark">Y</span>
+    <span class="brand-name" id="hostname">YesOS NAS</span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <span class="badge badge-ok" title="Panel servido solo por HTTPS (TLS 1.3)">TLS 1.3</span>
+  <span class="topbar-user" id="whoami"></span>
+  <button id="logout" class="btn btn-ghost">Cerrar sesión</button>
+</header>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar">
+    <a href="#/panel" data-page="panel">Panel</a>
+    <div class="nav-group">Almacenamiento</div>
+    <a href="#/discos" data-page="discos">Discos</a>
+    <a href="#/archivos" data-page="archivos">Sistema de archivos</a>
+    <a href="#/compartidas" data-page="compartidas">Carpetas compartidas</a>
+    <a href="#/instantaneas" data-page="instantaneas">Instantáneas</a>
+    <div class="nav-group">Acceso</div>
+    <a href="#/usuarios" data-page="usuarios">Usuarios</a>
+    <a href="#/dispositivos" data-page="dispositivos">Dispositivos</a>
+    <div class="nav-group">Sistema</div>
+    <a href="#/red" data-page="red">Red y servicios</a>
+    <a href="#/seguridad" data-page="seguridad">Seguridad</a>
+    <a href="#/registro" data-page="registro">Registro de actividad</a>
+  </nav>
+
+  <main class="content">
+    <div class="page-head">
+      <h1 id="page-title">Panel</h1>
+      <span class="page-meta" id="page-meta"></span>
+    </div>
+    <div id="page"></div>
+  </main>
+</div>
+<script src="/admin/app.js"></script>
+</body>
+</html>

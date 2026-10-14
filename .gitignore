@@ -1,0 +1,29 @@
+# Build output
+build/
+*.o
+*.a
+*.elf
+*.bin
+rust/target/
+selftest/rust/target/
+
+# Disks (the NAS keeps its own yesos_disk.img next to its Makefile)
+*.img
+*.qcow2
+
+# Apps packaged from apps/
+*.ypk
+*.YPK
+
+# Tools
+tools/.venv/
+__pycache__/
+*.py[cod]
+
+# QEMU leftovers, editors
+*.sock
+*.ppm
+.vscode/
+.idea/
+*.swp
+*~
