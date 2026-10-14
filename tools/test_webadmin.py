@@ -354,7 +354,7 @@ def main():
         for n in others:
             vm.send(f"user role {n} admin", 2)
         m = vm.send("user role carla superuser", 1)
-        check("Uso: user role" in vm.since(m) and roles().get("carla") == "ro", "console: unknown role rejected")
+        check("Usage: user role" in vm.since(m) and roles().get("carla") == "ro", "console: unknown role rejected")
         m = vm.send("user role nadie admin", 1)
         check("not found" in vm.since(m), "console: unknown user reported")
         st, r = action(tls, auth, csrf, "user_delete", name="carla")
@@ -413,11 +413,11 @@ def main():
 
         log = view(tls, auth, "audit").get("entries", [])
         texts = " | ".join(e["text"] for e in log)
-        check(len(log) >= 20 and any(not e["ok"] for e in log) and any(e["ok"] and "bloquear la b" in e["text"] for e in log),
+        check(len(log) >= 20 and any(not e["ok"] for e in log) and any(e["ok"] and "lock the vault" in e["text"] for e in log),
               f"audit log records accepted and refused actions ({len(log)} entries)")
         check(tricky not in texts and "carla-pass" not in texts and "new-web-pass" not in texts, "no password in the audit log")
         out = vm.output()
-        check("[WEBADMIN] OK   webadmin@10.0.2.2: crear usuario 'carla'" in out, "audit also printed on the console")
+        check("[WEBADMIN] OK   webadmin@10.0.2.2: create user 'carla'" in out, "audit also printed on the console")
         check(tricky not in out and "carla-pass-2" not in out and "new-web-pass-9" not in out, "no password on the console")
 
         # Names with markup (possible from the console; WebDAV refuses < > ") and

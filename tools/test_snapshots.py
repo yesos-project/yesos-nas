@@ -80,11 +80,11 @@ def main():
 
         # --- create: no data copied -----------------------------------------
         before = used()
-        st, r = act("snapshot_create", comment="antes de cambios", value="04/10/2026 18:00")
+        st, r = act("snapshot_create", comment="before changes", value="04/10/2026 18:00")
         snaps = view("snapshots")["snapshots"]
         s1 = snaps[0] if snaps else {}
         paths = {f["path"]: f for f in s1.get("files", [])}
-        check(st == 200 and s1.get("note") == "antes de cambios" and s1.get("created_by") == ADMIN[0],
+        check(st == 200 and s1.get("note") == "before changes" and s1.get("created_by") == ADMIN[0],
               f"snapshot created from the panel ({r.get('message')})")
         check("share/a.txt" in paths and "media/b.bin" in paths and paths.get("vault/S.TXT", {}).get("encrypted"),
               "snapshot holds share, media and the (encrypted) vault file")
@@ -198,7 +198,7 @@ def main():
         persist_ids = sorted(s["id"] for s in view("snapshots")["snapshots"])
         dav("PUT", "/dav/share/after.txt", b"written-after-snapshots")
         log = [e["text"] for e in view("audit")["entries"]]
-        check(any("instantánea" in t for t in log), "snapshot actions recorded in the audit log")
+        check(any("snapshot" in t for t in log), "snapshot actions recorded in the audit log")
         out = vm.output()
         check("FATAL" not in out and "EXCEPTION" not in out and "Security Alert" not in out,
               "no kernel faults or RedSea security alerts")

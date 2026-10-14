@@ -324,11 +324,11 @@ fn json_escape_into(out: &mut Vec<u8>, s: &[u8]) {
 
 fn action(req: &HttpRequest, name: &str, sid: &[u8; TOKEN_HEX + 1], ip: [u8; 4], port: u16) {
     if !ACTIONS.contains(&name) {
-        json(ip, port, "HTTP/1.1 404 Not Found", "{\"ok\":false,\"message\":\"Acción desconocida.\"}".as_bytes());
+        json(ip, port, "HTTP/1.1 404 Not Found", "{\"ok\":false,\"message\":\"Unknown action.\"}".as_bytes());
         return;
     }
     if req.body.len() > 4096 {
-        json(ip, port, "HTTP/1.1 413 Payload Too Large", "{\"ok\":false,\"message\":\"Petición demasiado grande.\"}".as_bytes());
+        json(ip, port, "HTTP/1.1 413 Payload Too Large", "{\"ok\":false,\"message\":\"Request too large.\"}".as_bytes());
         return;
     }
     let mut bufs = [[0u8; FIELD_MAX]; 9];
@@ -341,7 +341,7 @@ fn action(req: &HttpRequest, name: &str, sid: &[u8; TOKEN_HEX + 1], ip: [u8; 4],
     let mut status = 400;
     let mut msg = [0u8; 256];
     if bad {
-        let t = "Algún campo es demasiado largo o no es válido.";
+        let t = "A field is too long or not valid.";
         msg[..t.len()].copy_from_slice(t.as_bytes());
     } else {
         let mut act = [0u8; 24];
@@ -680,7 +680,7 @@ pub fn dav_guard(req: &HttpRequest, path: &str, raw_path: &str, ip: [u8; 4], por
                     core::str::from_utf8(&loc).unwrap_or(""), b"");
         } else {
             dav_text(ip, port, "HTTP/1.1 403 Forbidden", "DAV: 1, 2",
-                     "403: WebDAV requiere HTTPS y usuario. Usa https://<ip-del-nas>:8443/dav/\n");
+                     "403: WebDAV needs HTTPS and an account. Use https://<nas-ip>:8443/dav/\n");
         }
         return true;
     }
@@ -727,16 +727,16 @@ pub fn dav_guard(req: &HttpRequest, path: &str, raw_path: &str, ip: [u8; 4], por
         0 => false,
         403 => {
             dav_text(ip, port, "HTTP/1.1 403 Forbidden", "DAV: 1, 2",
-                     "403: esta cuenta no tiene acceso a esa carpeta o es de solo lectura.\n");
+                     "403: this account has no access to that folder, or it is read-only.\n");
             true
         }
         429 => {
             dav_text(ip, port, "HTTP/1.1 429 Too Many Requests", "DAV: 1, 2\r\nRetry-After: 30",
-                     "429: demasiados intentos fallidos; espera 30 s.\n");
+                     "429: too many failed attempts; wait 30 s.\n");
             true
         }
         _ => {
-            dav_text(ip, port, "HTTP/1.1 401 Unauthorized", DAV_REALM, "401: usuario o contraseña requeridos.\n");
+            dav_text(ip, port, "HTTP/1.1 401 Unauthorized", DAV_REALM, "401: user name and password required.\n");
             true
         }
     }

@@ -67,7 +67,7 @@ def main():
     big = os.urandom(3 * 1024 * 1024)               # maximum entropy, like encrypted/compressed data
     chunked = b"chunked upload " * 4000
     sha = lambda b: hashlib.sha256(b).hexdigest()
-    long_name = "Captura de pantalla 2026-10-04 a las 14.11.32 - informe trimestral del NAS (version final).png"
+    long_name = "Screenshot 2026-10-04 at 14.11.32 - quarterly reports of the NAS for the team (final copy).png"
 
     vm = tw.WebYesOS(disk, udp, web, tls)
     try:

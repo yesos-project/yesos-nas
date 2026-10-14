@@ -136,7 +136,7 @@ static Bool nas_shell_run(const char* cmd) {
             comment[i] = '\0';
 
             if (name[0] == '\0' || path[0] == '\0') {
-                kprintf("Uso: share add <nombre> <ruta> [rw|ro] [comentario]\n");
+                kprintf("Usage: share add <name> <path> [rw|ro] [comment]\n");
             } else {
                 Bool ro = (StrICmp(mode, "ro") == 0 || StrICmp(mode, "readonly") == 0);
                 nas_add_share(name, path, ro, comment[0] ? comment : "User Share");
@@ -146,7 +146,7 @@ static Bool nas_shell_run(const char* cmd) {
             const char* name = (StrNCmp(sub, "del ", 4) == 0) ? (sub + 4) : (sub + 3);
             while (*name == ' ') name++;
             if (*name == '\0') {
-                kprintf("Uso: share del <nombre>\n");
+                kprintf("Usage: share del <name>\n");
             } else {
                 nas_remove_share(name);
                 speaker_event(BEEP_SUCCESS);
@@ -165,7 +165,7 @@ static Bool nas_shell_run(const char* cmd) {
             } else {
                 kprintf("Share authentication is: %s\n",
                         nas_user_is_auth_required() ? "ACTIVE (Password Required)" : "DISABLED (Open LAN)");
-                kprintf("Uso: share auth [on | off]\n");
+                kprintf("Usage: share auth [on | off]\n");
             }
         } else if (StrCmp(sub, "reload") == 0) {
             nas_config_load();
@@ -175,13 +175,13 @@ static Bool nas_shell_run(const char* cmd) {
             nas_print_share_config();
             speaker_event(BEEP_SUCCESS);
         } else {
-            kprintf("Uso de share (carpetas del protocolo NAS y de WebDAV):\n");
-            kprintf("  share [list]                         - Lista carpetas compartidas y permisos\n");
-            kprintf("  share add <nom> <ruta> [rw|ro] [txt] - Publica una nueva carpeta compartida\n");
-            kprintf("  share del <nom>                      - Deja de publicar una carpeta\n");
-            kprintf("  share auth [on|off]                  - Exige usuario o LAN libre\n");
-            kprintf("  share cfg                            - Muestra el archivo %s\n", NAS_SERVER_CONFIG_FILE);
-            kprintf("  share reload                         - Recarga la configuracion desde disco\n");
+            kprintf("Usage of share (folders of the NAS protocol and WebDAV):\n");
+            kprintf("  share [list]                          - List the shared folders and their access\n");
+            kprintf("  share add <name> <path> [rw|ro] [txt] - Publish a new shared folder\n");
+            kprintf("  share del <name>                      - Stop publishing a folder\n");
+            kprintf("  share auth [on|off]                   - Require an account, or open LAN\n");
+            kprintf("  share cfg                             - Show the file %s\n", NAS_SERVER_CONFIG_FILE);
+            kprintf("  share reload                          - Reload the configuration from disk\n");
         }
     } else if (StrNCmp(cmd, "user", 4) == 0 && (cmd[4] == ' ' || cmd[4] == '\0')) {
         const char* sub = cmd + 4;
@@ -207,7 +207,7 @@ static Bool nas_shell_run(const char* cmd) {
             r[i] = '\0';
 
             if (u[0] == '\0' || p[0] == '\0') {
-                kprintf("Uso: user add <nombre> <contrasena> [admin|rw|ro]\n");
+                kprintf("Usage: user add <name> <password> [admin|rw|ro]\n");
             } else {
                 U8 role = NAS_ROLE_RW;
                 if (StrCmp(r, "admin") == 0) role = NAS_ROLE_ADMIN;
@@ -228,7 +228,7 @@ static Bool nas_shell_run(const char* cmd) {
             p[i] = '\0';
 
             if (u[0] == '\0' || p[0] == '\0') {
-                kprintf("Uso: user passwd <nombre> <nueva_contrasena>\n");
+                kprintf("Usage: user passwd <name> <new_password>\n");
             } else {
                 nas_user_change_password(u, p);
             }
@@ -249,7 +249,7 @@ static Bool nas_shell_run(const char* cmd) {
             else if (StrCmp(r, "rw") == 0) role = NAS_ROLE_RW;
             else if (StrCmp(r, "ro") == 0 || StrCmp(r, "readonly") == 0) role = NAS_ROLE_RO;
             if (u[0] == '\0' || role == 0xFF) {
-                kprintf("Uso: user role <nombre> <admin|rw|ro>\n");
+                kprintf("Usage: user role <name> <admin|rw|ro>\n");
             } else if (!nas_user_get_by_name(u)) {
                 kprintf("[NAS AUTH] User '%s' not found.\n", u);
             } else if (nas_user_set_role(u, role) && role != NAS_ROLE_ADMIN) {
@@ -264,7 +264,7 @@ static Bool nas_shell_run(const char* cmd) {
             u[i] = '\0';
 
             if (u[0] == '\0') {
-                kprintf("Uso: user del <nombre>\n");
+                kprintf("Usage: user del <name>\n");
             } else {
                 nas_user_remove(u);
             }
@@ -278,10 +278,10 @@ static Bool nas_shell_run(const char* cmd) {
             } else {
                 kprintf("Zero-Trust User Auth is currently: %s\n",
                         nas_user_is_auth_required() ? "ACTIVE (Zero-Trust ON)" : "DISABLED (Open LAN)");
-                kprintf("Uso: user auth [on | off]\n");
+                kprintf("Usage: user auth [on | off]\n");
             }
         } else {
-            kprintf("Uso: user [list | add <name> <pass> [admin|rw|ro] | role <name> <admin|rw|ro> | passwd <name> <pass> | del <name> | auth <on|off>]\n");
+            kprintf("Usage: user [list | add <name> <pass> [admin|rw|ro] | role <name> <admin|rw|ro> | passwd <name> <pass> | del <name> | auth <on|off>]\n");
         }
     } else {
         return FALSE;

@@ -113,20 +113,20 @@ U0 snapshot_init(U0) {
 
 Bool snapshot_set_auto(U32 minutes, U32 keep, char* msg, size_t max) {
     if (minutes > 60 * 24 * 31 || keep == 0 || keep > 100) {
-        ksnprintf(msg, max, "Valores no válidos: intervalo 0-44640 minutos, conservar 1-100.");
+        ksnprintf(msg, max, "Invalid values: interval 0-44640 minutes, keep 1-100.");
         return FALSE;
     }
     char cfg[96];
     ksnprintf(cfg, sizeof(cfg), "# YesOS automatic snapshots\ninterval_minutes=%u\nkeep=%u\n", minutes, keep);
     if (!vfs_write_file(SNAP_CONFIG_FILE, cfg, StrLen(cfg))) {
-        ksnprintf(msg, max, "No se pudo guardar %s.", SNAP_CONFIG_FILE);
+        ksnprintf(msg, max, "%s could not be saved.", SNAP_CONFIG_FILE);
         return FALSE;
     }
     g_auto_minutes = minutes;
     g_auto_keep = keep;
     g_last_auto_ms = timer_get_uptime_ms();
-    if (minutes) ksnprintf(msg, max, "Instantáneas automáticas cada %u min; se conservan las últimas %u.", minutes, keep);
-    else ksnprintf(msg, max, "Instantáneas automáticas desactivadas.");
+    if (minutes) ksnprintf(msg, max, "Automatic snapshots every %u min; the last %u are kept.", minutes, keep);
+    else ksnprintf(msg, max, "Automatic snapshots disabled.");
     kprintf("[SNAPSHOT] %s\n", msg);
     return TRUE;
 }
@@ -252,8 +252,8 @@ Bool snapshot_create(const char* who, const char* note, const char* client_time,
     U32 need = snapshot_entries_needed();
     U32 freee = redsea_eml_free_entries();
     if (need > freee) {
-        ksnprintf(msg, max, "No caben más entradas en el directorio de RedSea: la instantánea necesita %u y quedan %u. "
-                  "Borra instantáneas antiguas.", need, freee);
+        ksnprintf(msg, max, "The RedSea directory has no room: the snapshot needs %u entries and %u are left. "
+                  "Delete old snapshots.", need, freee);
         return FALSE;
     }
     U32 id = 1;
@@ -262,7 +262,7 @@ Bool snapshot_create(const char* who, const char* note, const char* client_time,
         if (x >= id) id = x + 1;
     }
     if (id > 9999) {
-        ksnprintf(msg, max, "Se agotaron los números de instantánea.");
+        ksnprintf(msg, max, "Snapshot numbers are exhausted.");
         return FALSE;
     }
     char dir[24];
@@ -296,14 +296,14 @@ Bool snapshot_create(const char* who, const char* note, const char* client_time,
     redsea_eml_set_backup_writer(FALSE);
     if (!ok) {
         delete_prefix(dir);
-        ksnprintf(msg, max, "No se pudo crear la instantánea (directorio o disco lleno); se deshizo.");
+        ksnprintf(msg, max, "The snapshot could not be created (directory or disk full); it was undone.");
         return FALSE;
     }
     if (out_id) *out_id = id;
     if (skipped) {
-        ksnprintf(msg, max, "Instantánea %u creada: %u archivos (%u omitidos por nombre demasiado largo).", id, files, skipped);
+        ksnprintf(msg, max, "Snapshot %u created: %u files (%u skipped: name too long).", id, files, skipped);
     } else {
-        ksnprintf(msg, max, "Instantánea %u creada: %u archivos, sin copiar datos.", id, files);
+        ksnprintf(msg, max, "Snapshot %u created: %u files, no data copied.", id, files);
     }
     kprintf("[SNAPSHOT] %s\n", msg);
     return TRUE;
@@ -322,7 +322,7 @@ static SnapshotInfo g_list[128];
 
 Bool snapshot_delete(U32 id, char* msg, size_t max) {
     if (!snapshot_exists(id)) {
-        ksnprintf(msg, max, "No existe la instantánea %u.", id);
+        ksnprintf(msg, max, "No such snapshot %u.", id);
         return FALSE;
     }
     char dir[24];
@@ -330,14 +330,14 @@ Bool snapshot_delete(U32 id, char* msg, size_t max) {
     U64 before = redsea_eml_get_free_sectors();
     U32 n = delete_prefix(dir);
     U64 freed = redsea_eml_get_free_sectors() - before;
-    ksnprintf(msg, max, "Instantánea %u eliminada (%u entradas, %u KiB liberados).", id, n, (U32)(freed / 2));
+    ksnprintf(msg, max, "Snapshot %u deleted (%u entries, %u KiB freed).", id, n, (U32)(freed / 2));
     kprintf("[SNAPSHOT] %s\n", msg);
     return TRUE;
 }
 
 Bool snapshot_restore(U32 id, const char* path, char* msg, size_t max) {
     if (!snapshot_exists(id)) {
-        ksnprintf(msg, max, "No existe la instantánea %u.", id);
+        ksnprintf(msg, max, "No such snapshot %u.", id);
         return FALSE;
     }
     RedSeaVolume* v = redsea_eml_get_volume();
@@ -346,20 +346,20 @@ Bool snapshot_restore(U32 id, const char* path, char* msg, size_t max) {
     size_t dl = StrLen(dir);
     if (path && path[0]) {
         if (!snapshot_in_scope(path) || StrLen(path) + dl >= REDSEA_MAX_FILENAME) {
-            ksnprintf(msg, max, "Ruta no válida.");
+            ksnprintf(msg, max, "Invalid path.");
             return FALSE;
         }
         char src[REDSEA_MAX_FILENAME];
         ksnprintf(src, sizeof(src), "%s%s", dir, path);
         if (!redsea_eml_exists(src)) {
-            ksnprintf(msg, max, "'%s' no está en la instantánea %u.", path, id);
+            ksnprintf(msg, max, "'%s' is not in snapshot %u.", path, id);
             return FALSE;
         }
         if (!redsea_eml_link(src, path, 0, REDSEA_FLAG_READONLY)) {
-            ksnprintf(msg, max, "No se pudo restaurar '%s' (directorio lleno).", path);
+            ksnprintf(msg, max, "'%s' could not be restored (directory full).", path);
             return FALSE;
         }
-        ksnprintf(msg, max, "Restaurado '%s' desde la instantánea %u.", path, id);
+        ksnprintf(msg, max, "Restored '%s' from snapshot %u.", path, id);
         kprintf("[SNAPSHOT] %s\n", msg);
         return TRUE;
     }
@@ -378,8 +378,8 @@ Bool snapshot_restore(U32 id, const char* path, char* msg, size_t max) {
         if (redsea_eml_link(src, dst, 0, REDSEA_FLAG_READONLY)) restored++;
         else failed++;
     }
-    if (failed) ksnprintf(msg, max, "Restaurados %u archivos de la instantánea %u; %u fallaron (directorio lleno).", restored, id, failed);
-    else ksnprintf(msg, max, "Restaurados %u archivos de la instantánea %u (los archivos creados después se conservan).", restored, id);
+    if (failed) ksnprintf(msg, max, "Restored %u files from snapshot %u; %u failed (directory full).", restored, id, failed);
+    else ksnprintf(msg, max, "Restored %u files from snapshot %u (files created afterwards are kept).", restored, id);
     kprintf("[SNAPSHOT] %s\n", msg);
     return failed == 0;
 }
@@ -403,7 +403,7 @@ static U0 prune_automatic(U0) {
 Bool snapshot_run_auto_now(char* msg, size_t max) {
     g_last_auto_ms = timer_get_uptime_ms();
     U32 id = 0;
-    Bool ok = snapshot_create("auto", "automática", "", TRUE, &id, msg, max);
+    Bool ok = snapshot_create("auto", "automatic", "", TRUE, &id, msg, max);
     if (ok) prune_automatic();
     return ok;
 }

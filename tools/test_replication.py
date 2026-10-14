@@ -31,7 +31,7 @@ import yesos_replicate as rep  # noqa: E402
 
 failures = []
 ADMIN = ("repadmin", "rep-admin-pass1")
-BACKUP_PASS = "copia-de-seguridad-2026"
+BACKUP_PASS = "backup-passphrase-2026"
 
 
 def check(cond, label):
@@ -126,11 +126,11 @@ def main():
                   "incremental pull: only the 2 changed/new files are downloaded")
             code, out = run("pull", repo, *remote(tls, fp))
             check(code == 0 and "Pulled 0 new snapshot" in out, "pull with nothing new copies nothing")
-            st, r = act("snapshot_create", comment="sin cambios")
+            st, r = act("snapshot_create", comment="no changes")
             code, out = run("pull", repo, *remote(tls, fp))
             check(code == 0 and "Pulled 1 new snapshot" in out and " 0 downloaded" in out,
                   "snapshot with no changes: listed, zero bytes downloaded")
-            check("réplica: exportar" in str(tw.view(tls, auth, "audit")), "exports appear in the activity log")
+            check("replica: export" in str(tw.view(tls, auth, "audit")), "exports appear in the activity log")
         finally:
             vm.stop()
 

@@ -45,7 +45,7 @@ static U0 nas_load_default_shares(U0) {
     // Share 3: Media & Audio Jukebox
     StrNCpy(g_nas_state.shares[2].share_name, "media", 31);
     StrNCpy(g_nas_state.shares[2].mount_path, "/MUSIC", 63);
-    StrNCpy(g_nas_state.shares[2].comment, "Biblioteca de Audio EML", 63);
+    StrNCpy(g_nas_state.shares[2].comment, "Music Library", 63);
     g_nas_state.shares[2].total_mb = 1024;
     g_nas_state.shares[2].used_mb  = 340;
     g_nas_state.shares[2].read_only = TRUE;
@@ -315,7 +315,7 @@ Bool nas_remove_share(const char* name) {
 
 U0 nas_print_share_list(U0) {
     kprintf("\n======================== [ NAS SHARED FOLDERS ] ========================\n");
-    kprintf(" #   RECURSO       RUTA              ACCESO    COMENTARIO\n");
+    kprintf(" #   SHARE         PATH              ACCESS    COMMENT\n");
     kprintf("------------------------------------------------------------------------\n");
     for (U32 i = 0; i < g_nas_state.shares_count; i++) {
         NASShare* s = &g_nas_state.shares[i];

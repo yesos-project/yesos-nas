@@ -171,7 +171,7 @@ def main():
             check(len(snaps) == 2 and all(s["files_count"] >= nfiles for s in snaps),
                   f"capacity: snapshot list with file lists ({list_s:.1f} s, {view.get('dir_entries_free')} entries free)")
             st, res = tw.action(tls, auth, csrf, "snapshot_create", comment="one too many")
-            check(st == 409 and "entradas" in res.get("message", ""),
+            check(st == 409 and "entries" in res.get("message", ""),
                   f"capacity: a snapshot that does not fit is refused clearly ({res.get('message')})")
             sid = snaps[0]["id"]
             t0 = time.time()

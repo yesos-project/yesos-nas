@@ -108,11 +108,11 @@ fn backup_html(rel: &str, listing: &[u8]) -> Vec<u8> {
     let mut buf = alloc::vec![0u8; 2048 + listing.len() * 8];
     let mut w = BufferWriter::new(&mut buf);
     let base = if rel.is_empty() { alloc::string::String::from("/dav/backup/") } else { alloc::format!("/dav/backup/{}/", rel) };
-    w.write_str("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"><title>");
+    w.write_str("<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>");
     w.write_xml_text(&base);
     w.write_str("</title></head><body style=\"font-family:system-ui,sans-serif;max-width:900px;margin:24px auto;padding:0 16px\"><h1 style=\"font-size:20px\">");
     w.write_xml_text(&base);
-    w.write_str("</h1><p>Instantáneas de solo lectura.</p><ul>");
+    w.write_str("</h1><p>Read-only snapshots.</p><ul>");
     if !rel.is_empty() {
         w.write_str("<li><a href=\"../\">..</a></li>");
     }

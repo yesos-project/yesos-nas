@@ -53,7 +53,7 @@ The kernel's WebDAV server (`rust/src/http.rs`) runs on a small stateful TCP lay
 There is no content-entropy "anti-ransomware" filter: it could not tell photos, audio, archives or encrypted backups from ransomware, so it was removed. Ransomware protection relies on snapshots in the read-only `/backup` area (section 12).
 
 ### Web administration (`https://<ip>:8443/`) — `src/webadmin.c`, `rust/src/webadmin.rs`, `rust/src/tls.rs`
-An OpenMediaVault-style panel with a Spanish UI. Pages: Panel, Discos, Sistema de archivos, Carpetas compartidas, Instantáneas, Usuarios, Dispositivos, Red y servicios, Seguridad and Registro de actividad. It shows only real kernel state; S.M.A.R.T. is reported as unavailable.
+An OpenMediaVault-style panel. Pages: Overview, Disks, File system, Shared folders, Snapshots, Users, Devices, Network and services, Security and Activity log. It shows only real kernel state; S.M.A.R.T. is reported as unavailable.
 - **Who can log in:** only NAS accounts with the `admin` role, and only from a device admitted at the console (`nas admit <ip>`). The login page tells a non-admitted device which command to run.
 - **Passwords:** checked with the existing Argon2id accounts (per-account 5-failure lockout) plus a per-IP throttle (5 failures, 30 s). Unknown users and wrong passwords get the same answer.
 - **Sessions:** 256-bit DRBG tokens, stored only as BLAKE2b hashes, bound to the client IP, 15 min idle / 8 h absolute lifetime, at most 8. A session dies if its account is removed, demoted or the device is blocked. Cookie: `HttpOnly; SameSite=Strict`.
@@ -73,7 +73,7 @@ An OpenMediaVault-style panel with a Spanish UI. Pages: Panel, Discos, Sistema d
     - Names and paths use a strict character set; no `..`, `/SYS` or `/vault`.
     - Comments cannot contain control characters, so nothing can be injected into `SYS/SMB.CFG`.
   - **Vault:** lock. Unlocking still needs the passphrase at the console.
-- **Audit log:** every attempt, accepted or refused, is recorded with user, IP and action, but never the password. It is kept in a 64-entry RAM ring (Registro de actividad) and printed on the console.
+- **Audit log:** every attempt, accepted or refused, is recorded with user, IP and action, but never the password. It is kept in a 64-entry RAM ring (Activity log) and printed on the console.
 
 **HTTPS (TLS 1.3 in the kernel).** The panel and its API are served only on TCP 8443. On port 8080, `/` and `/login` redirect to HTTPS, and the API answers `403 https_required`, so a session cookie is useless over plain HTTP. The cookie also carries `Secure`.
 - rustls runs in `no_std` mode through its unbuffered API, driven by the kernel's TCP layer. It uses a small crypto provider built on RustCrypto (`rust/src/tls.rs`):
@@ -140,7 +140,7 @@ A snapshot `backup/snap-NNNN/` captures every file of `share/`, `media/` and `va
   - `mount` compacts a directory with holes and warns about duplicate entries.
 - **Driver fix found by these tests:** the virtio-blk and virtio-net drivers declared their shared rings `packed`. That made the compiler read the device's `used->idx` with two byte loads. Roughly every 256 requests, a torn read made the driver treat unfinished requests as complete, which returned another request's data and failed the following requests. Intermittently, files came back with wrong content and boot-time reads of `SYS/` files failed. The rings now use their natural virtio 1.0 layout, checked with `_Static_assert`, the indices are `volatile` 16-bit fields, and the drivers report any queue desync on the console.
 - **Restore:** a single file or a whole snapshot, back to its original path. Restored vault files still decrypt, because the path is unchanged. Files created after the snapshot are left alone.
-- **Browsing:** read-only, from the panel (*Instantáneas*), the console (`snapshot …`) or WebDAV at `https://<ip>:8443/dav/backup/`. The tree is nested, and folders give a plain HTML index in a browser. Vault ciphertext is never served. Any modifying method under `/dav/backup` gets `403`. Read-only accounts cannot see `/backup`.
+- **Browsing:** read-only, from the panel (*Snapshots*), the console (`snapshot …`) or WebDAV at `https://<ip>:8443/dav/backup/`. The tree is nested, and folders give a plain HTML index in a browser. Vault ciphertext is never served. Any modifying method under `/dav/backup` gets `403`. Read-only accounts cannot see `/backup`.
 - **Automatic snapshots:** every N minutes of uptime (the NAS has no wall clock), keeping the last K automatic ones. Manual snapshots are never pruned. The schedule is stored in `SYS/SNAPSHOT.CFG`. The time shown for a manual snapshot is the one reported by the creator's browser.
 
 `python3 tools/test_snapshots.py` runs 46 checks over two boots:
@@ -184,10 +184,10 @@ Raising that panel field limit then exposed a kernel bug. `ksnprintf` bounded on
 Snapshots protect against deletion and ransomware, but not against losing the disk. Replication copies them to another machine over HTTPS (pull, so the NAS never needs credentials for the backup machine):
 
 ```bash
-python3 tools/yesos_replicate.py init    ~/yesos-copia                   # asks for a backup passphrase
-python3 tools/yesos_replicate.py pull    ~/yesos-copia --host 192.168.1.50 --user admin --fingerprint <SHA-256 from `tls`>
-python3 tools/yesos_replicate.py verify  ~/yesos-copia
-python3 tools/yesos_replicate.py restore ~/yesos-copia --snap 2 --host <new NAS> --user admin --fingerprint <its SHA-256>
+python3 tools/yesos_replicate.py init    ~/yesos-backup                   # asks for a backup passphrase
+python3 tools/yesos_replicate.py pull    ~/yesos-backup --host 192.168.1.50 --user admin --fingerprint <SHA-256 from `tls`>
+python3 tools/yesos_replicate.py verify  ~/yesos-backup
+python3 tools/yesos_replicate.py restore ~/yesos-backup --snap 2 --host <new NAS> --user admin --fingerprint <its SHA-256>
 ```
 
 - **Access:** an admin account, from an admitted machine (`nas admit <ip>`). The certificate is pinned by its fingerprint, and any other certificate is refused before the password is sent. Exports and imports are recorded in the activity log.

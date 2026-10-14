@@ -16,7 +16,7 @@
         $('admit-cmd').textContent = 'nas admit ' + a.ip;
         $('admission').classList.remove('hidden');
       }
-      if (a.retry_sec > 0) showError('Demasiados intentos. Espera ' + a.retry_sec + ' s.');
+      if (a.retry_sec > 0) showError('Too many attempts. Wait ' + a.retry_sec + ' s.');
     })
     .catch(() => {});
 
@@ -25,11 +25,11 @@
     const user = $('user').value.trim();
     const pass = $('pass').value;
     if (!user || !pass) {
-      showError('Escribe usuario y contraseña.');
+      showError('Enter your user name and password.');
       return;
     }
     btn.disabled = true;
-    btn.textContent = 'Verificando...';
+    btn.textContent = 'Checking...';
     showError('');
     const body = new URLSearchParams({ user: user, pass: pass });
     fetch('/api/login', {
@@ -47,22 +47,22 @@
         }
         const e = res.body.error;
         if (e === 'not_admitted') {
-          showError('Este equipo no está admitido en el NAS.');
+          showError('This device is not admitted on the NAS.');
           $('admission').classList.remove('hidden');
         } else if (e === 'not_admin') {
-          showError('Esta cuenta no tiene rol de administrador.');
+          showError('This account does not have the admin role.');
         } else if (e === 'throttled') {
-          showError('Demasiados intentos fallidos. Espera ' + res.body.retry_sec + ' s.');
+          showError('Too many failed attempts. Wait ' + res.body.retry_sec + ' s.');
         } else if (e === 'bad_credentials') {
-          showError('Usuario o contraseña incorrectos.');
+          showError('Wrong user name or password.');
         } else {
-          showError('No se pudo iniciar sesión (' + (e || res.status) + ').');
+          showError('Could not log in (' + (e || res.status) + ').');
         }
       })
-      .catch(() => showError('El NAS no responde.'))
+      .catch(() => showError('The NAS does not answer.'))
       .finally(() => {
         btn.disabled = false;
-        btn.textContent = 'Iniciar sesión';
+        btn.textContent = 'Log in';
       });
   });
 })();

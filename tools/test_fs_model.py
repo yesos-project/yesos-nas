@@ -247,7 +247,7 @@ def part_b(tmp, seed, n_ops):
                 kind = "snapdel"
             else:
                 st, r = tw.action(tls, auth, csrf, "snapshot_create", comment=f"op{op}")
-                mm = re.search(r"Instantánea (\d+) creada", r.get("message", ""))
+                mm = re.search(r"Snapshot (\d+) created", r.get("message", ""))
                 if st == 200 and mm:
                     model.snaps[int(mm.group(1))] = dict(model.live)
                 else:

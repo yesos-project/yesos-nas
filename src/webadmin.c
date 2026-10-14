@@ -418,9 +418,9 @@ static U0 section_shares(JW* w) {
     jw_close(w, "],");
     // WebDAV exposes these RedSea prefixes (see kernel/webui_bridge.c).
     jw_key(w, "webdav"); jw_raw(w, "[");
-    jw_raw(w, "{\"path\":\"/dav/share/\",\"access\":\"lectura/escritura\",\"who\":\"admin y lectura/escritura\"},");
-    jw_raw(w, "{\"path\":\"/dav/media/\",\"access\":\"lectura/escritura\",\"who\":\"todas las cuentas (solo lectura: solo leer)\"},");
-    jw_raw(w, "{\"path\":\"/dav/backup/\",\"access\":\"solo lectura (WORM)\",\"who\":\"admin y lectura/escritura\"}");
+    jw_raw(w, "{\"path\":\"/dav/share/\",\"access\":\"read/write\",\"who\":\"admin and read/write\"},");
+    jw_raw(w, "{\"path\":\"/dav/media/\",\"access\":\"read/write\",\"who\":\"every account (read-only accounts: read)\"},");
+    jw_raw(w, "{\"path\":\"/dav/backup/\",\"access\":\"read-only (WORM)\",\"who\":\"admin and read/write\"}");
     jw_raw(w, "],");
     jw_kb(w, "auth_required", nas_user_is_auth_required());
     jw_close(w, "}");
@@ -497,8 +497,8 @@ static U0 section_network(JW* w) {
     }
     jw_key(w, "services"); jw_raw(w, "[");
     jw_raw(w, "{\"name\":\"NAS (Noise NK)\",\"proto\":\"udp\",\"port\":31415},");
-    jw_raw(w, "{\"name\":\"HTTP (solo redirige a HTTPS)\",\"proto\":\"tcp\",\"port\":8080},");
-    jw_raw(w, "{\"name\":\"Panel de administración + WebDAV con usuario (HTTPS, TLS 1.3)\",\"proto\":\"tcp\",\"port\":8443}");
+    jw_raw(w, "{\"name\":\"HTTP (redirects to HTTPS only)\",\"proto\":\"tcp\",\"port\":8080},");
+    jw_raw(w, "{\"name\":\"Admin panel + WebDAV with an account (HTTPS, TLS 1.3)\",\"proto\":\"tcp\",\"port\":8443}");
     jw_raw(w, "],");
     if (fw) {
         jw_key(w, "firewall"); jw_raw(w, "{");
@@ -541,7 +541,7 @@ static U0 section_security(JW* w) {
     jw_kb(w, "dev_remote_build", FALSE);
 #endif
     jw_kb(w, "transport_encrypted", TRUE);   // the API is only served over HTTPS
-    jw_ks(w, "transport", "TLS 1.3 (X25519, ChaCha20-Poly1305 / AES-128-GCM), certificado autofirmado ECDSA P-256");
+    jw_ks(w, "transport", "TLS 1.3 (X25519, ChaCha20-Poly1305 / AES-128-GCM), self-signed ECDSA P-256 certificate");
     jw_close(w, "}");
 }
 
@@ -841,86 +841,86 @@ I32 webadmin_action(const char* sid, U32 ip, const char* action, const char* con
     U8 role = 0;
 
     if (StrCmp(action, "user_add") == 0) {
-        ksnprintf(what, sizeof(what), "crear usuario '%s' (%s)", name, f[WA_F_ROLE]);
-        if (!valid_chars(name, 1, NAS_MAX_USERNAME_LEN - 1, "._-")) RESULT(400, "Nombre no válido: 1-31 caracteres, letras, números, punto, guion o guion bajo.");
-        else if (!parse_role(f[WA_F_ROLE], &role)) RESULT(400, "Rol no válido.");
+        ksnprintf(what, sizeof(what), "create user '%s' (%s)", name, f[WA_F_ROLE]);
+        if (!valid_chars(name, 1, NAS_MAX_USERNAME_LEN - 1, "._-")) RESULT(400, "Invalid name: 1-31 characters, letters, digits, dot, hyphen or underscore.");
+        else if (!parse_role(f[WA_F_ROLE], &role)) RESULT(400, "Invalid role.");
         else if (StrLen(f[WA_F_PASSWORD]) < NAS_MIN_PASSWORD_LEN || StrLen(f[WA_F_PASSWORD]) >= NAS_MAX_PASSWORD_LEN)
-            RESULT(400, "La contraseña debe tener entre %u y %u caracteres.", NAS_MIN_PASSWORD_LEN, NAS_MAX_PASSWORD_LEN - 1);
-        else if (nas_user_get_by_name(name)) RESULT(409, "Ya existe un usuario '%s'.", name);
-        else if (nas_user_get_state()->user_count >= NAS_MAX_USERS) RESULT(409, "No caben más cuentas (máximo %u).", NAS_MAX_USERS);
-        else if (nas_user_add(name, f[WA_F_PASSWORD], role)) RESULT(200, "Usuario '%s' creado.", name);
-        else RESULT(500, "No se pudo crear el usuario.");
+            RESULT(400, "The password must have %u to %u characters.", NAS_MIN_PASSWORD_LEN, NAS_MAX_PASSWORD_LEN - 1);
+        else if (nas_user_get_by_name(name)) RESULT(409, "A user '%s' already exists.", name);
+        else if (nas_user_get_state()->user_count >= NAS_MAX_USERS) RESULT(409, "No room for more accounts (%u at most).", NAS_MAX_USERS);
+        else if (nas_user_add(name, f[WA_F_PASSWORD], role)) RESULT(200, "User '%s' created.", name);
+        else RESULT(500, "The user could not be created.");
     } else if (StrCmp(action, "user_delete") == 0) {
-        ksnprintf(what, sizeof(what), "eliminar usuario '%s'", name);
-        if (!nas_user_get_by_name(name)) RESULT(404, "No existe el usuario '%s'.", name);
-        else if (StrCmp(name, who) == 0) RESULT(403, "No puedes eliminar tu propia cuenta.");
-        else if (nas_user_remove(name)) { close_sessions_of(name, NULL); RESULT(200, "Usuario '%s' eliminado.", name); }
-        else RESULT(409, "No se pudo eliminar '%s' (debe quedar al menos un administrador).", name);
+        ksnprintf(what, sizeof(what), "delete user '%s'", name);
+        if (!nas_user_get_by_name(name)) RESULT(404, "No such user '%s'.", name);
+        else if (StrCmp(name, who) == 0) RESULT(403, "You cannot delete your own account.");
+        else if (nas_user_remove(name)) { close_sessions_of(name, NULL); RESULT(200, "User '%s' deleted.", name); }
+        else RESULT(409, "'%s' could not be deleted (at least one admin must remain).", name);
     } else if (StrCmp(action, "user_role") == 0) {
-        ksnprintf(what, sizeof(what), "cambiar rol de '%s' a %s", name, f[WA_F_ROLE]);
-        if (!nas_user_get_by_name(name)) RESULT(404, "No existe el usuario '%s'.", name);
-        else if (!parse_role(f[WA_F_ROLE], &role)) RESULT(400, "Rol no válido.");
-        else if (StrCmp(name, who) == 0 && role != NAS_ROLE_ADMIN) RESULT(403, "No puedes quitarte el rol de administrador a ti mismo.");
-        else if (nas_user_set_role(name, role)) { if (role != NAS_ROLE_ADMIN) close_sessions_of(name, NULL); RESULT(200, "Rol de '%s' actualizado.", name); }
-        else RESULT(409, "No se pudo cambiar el rol (debe quedar al menos un administrador).");
+        ksnprintf(what, sizeof(what), "change the role of '%s' to %s", name, f[WA_F_ROLE]);
+        if (!nas_user_get_by_name(name)) RESULT(404, "No such user '%s'.", name);
+        else if (!parse_role(f[WA_F_ROLE], &role)) RESULT(400, "Invalid role.");
+        else if (StrCmp(name, who) == 0 && role != NAS_ROLE_ADMIN) RESULT(403, "You cannot remove the admin role from yourself.");
+        else if (nas_user_set_role(name, role)) { if (role != NAS_ROLE_ADMIN) close_sessions_of(name, NULL); RESULT(200, "Role of '%s' updated.", name); }
+        else RESULT(409, "The role could not be changed (at least one admin must remain).");
     } else if (StrCmp(action, "user_password") == 0) {
-        ksnprintf(what, sizeof(what), "cambiar contraseña de '%s'", name);
+        ksnprintf(what, sizeof(what), "change the password of '%s'", name);
         Bool self = StrCmp(name, who) == 0;
         NASUser* u = nas_user_get_by_name(name);
         NASUser* chk = NULL;
-        if (!u) RESULT(404, "No existe el usuario '%s'.", name);
+        if (!u) RESULT(404, "No such user '%s'.", name);
         else if (StrLen(f[WA_F_PASSWORD]) < NAS_MIN_PASSWORD_LEN || StrLen(f[WA_F_PASSWORD]) >= NAS_MAX_PASSWORD_LEN)
-            RESULT(400, "La contraseña debe tener entre %u y %u caracteres.", NAS_MIN_PASSWORD_LEN, NAS_MAX_PASSWORD_LEN - 1);
-        else if (self && !nas_user_authenticate(who, f[WA_F_CURRENT], &chk)) RESULT(403, "La contraseña actual no es correcta.");
+            RESULT(400, "The password must have %u to %u characters.", NAS_MIN_PASSWORD_LEN, NAS_MAX_PASSWORD_LEN - 1);
+        else if (self && !nas_user_authenticate(who, f[WA_F_CURRENT], &chk)) RESULT(403, "The current password is not correct.");
         else if (nas_user_change_password(name, f[WA_F_PASSWORD])) {
             close_sessions_of(name, self ? me : NULL);   // other sessions of that account end
-            RESULT(200, "Contraseña de '%s' actualizada.", name);
-        } else RESULT(500, "No se pudo cambiar la contraseña.");
+            RESULT(200, "Password of '%s' updated.", name);
+        } else RESULT(500, "The password could not be changed.");
     } else if (StrCmp(action, "auth_required") == 0) {
         Bool on = StrCmp(f[WA_F_VALUE], "on") == 0;
-        ksnprintf(what, sizeof(what), "autenticación del protocolo NAS: %s", on ? "obligatoria" : "desactivada");
-        if (!on && StrCmp(f[WA_F_VALUE], "off") != 0) RESULT(400, "Valor no válido.");
-        else { nas_user_set_auth_required(on); nas_config_save(); RESULT(200, "Autenticación del protocolo NAS %s.", on ? "activada" : "desactivada"); }
+        ksnprintf(what, sizeof(what), "NAS protocol authentication: %s", on ? "required" : "off");
+        if (!on && StrCmp(f[WA_F_VALUE], "off") != 0) RESULT(400, "Invalid value.");
+        else { nas_user_set_auth_required(on); nas_config_save(); RESULT(200, "NAS protocol authentication %s.", on ? "enabled" : "disabled"); }
     } else if (StrCmp(action, "device_admit") == 0 || StrCmp(action, "device_block") == 0) {
         Bool admit = action[7] == 'a';
         U32 target = 0;
-        ksnprintf(what, sizeof(what), "%s dispositivo %s", admit ? "admitir" : "bloquear", f[WA_F_IP]);
-        if (!parse_lan_ip(f[WA_F_IP], &target)) RESULT(400, "IP no válida: debe ser una dirección de la red local.");
-        else if (!admit && target == ip) RESULT(403, "No puedes bloquear el equipo desde el que administras.");
-        else if (admit && f[WA_F_NAME][0] && !valid_chars(f[WA_F_NAME], 1, 31, "._- ")) RESULT(400, "Nombre de dispositivo no válido.");
-        else if (admit && security_pin_is_locked()) RESULT(403, "La consola está bloqueada con PIN: no se admiten dispositivos.");
+        ksnprintf(what, sizeof(what), "%s device %s", admit ? "admit" : "block", f[WA_F_IP]);
+        if (!parse_lan_ip(f[WA_F_IP], &target)) RESULT(400, "Invalid IP: it must be an address on the local network.");
+        else if (!admit && target == ip) RESULT(403, "You cannot block the machine you are administering from.");
+        else if (admit && f[WA_F_NAME][0] && !valid_chars(f[WA_F_NAME], 1, 31, "._- ")) RESULT(400, "Invalid device name.");
+        else if (admit && security_pin_is_locked()) RESULT(403, "The console is locked with the PIN: no devices can be admitted.");
         else if (admit ? nas_admit_client_ip(target, f[WA_F_NAME]) : nas_block_client_ip(target))
-            RESULT(200, "Dispositivo %s %s.", f[WA_F_IP], admit ? "admitido" : "bloqueado");
-        else RESULT(admit ? 409 : 404, admit ? "No caben más dispositivos." : "Dispositivo desconocido.");
+            RESULT(200, "Device %s %s.", f[WA_F_IP], admit ? "admitted" : "blocked");
+        else RESULT(admit ? 409 : 404, admit ? "No room for more devices." : "Unknown device.");
     } else if (StrCmp(action, "share_add") == 0) {
-        ksnprintf(what, sizeof(what), "crear carpeta compartida '%s' -> %s", name, f[WA_F_PATH]);
+        ksnprintf(what, sizeof(what), "create shared folder '%s' -> %s", name, f[WA_F_PATH]);
         const char* path = f[WA_F_PATH];
         Bool bad_path = path[0] != '/' || !valid_chars(path, 2, 63, "/_.-") || StrNICmp(path, "/sys", 4) == 0 ||
                         StrNICmp(path, "/vault", 6) == 0;
         for (const char* c = path; *c && !bad_path; c++) bad_path = (c[0] == '.' && c[1] == '.');
-        if (!valid_chars(name, 1, 31, "_-")) RESULT(400, "Nombre no válido: letras, números, guion o guion bajo.");
-        else if (bad_path) RESULT(400, "Ruta no válida: absoluta, sin '..', fuera de /SYS y /vault.");
-        else if (f[WA_F_COMMENT][0] && !valid_chars(f[WA_F_COMMENT], 1, 63, " ._-,()")) RESULT(400, "Comentario no válido.");
+        if (!valid_chars(name, 1, 31, "_-")) RESULT(400, "Invalid name: letters, digits, hyphen or underscore.");
+        else if (bad_path) RESULT(400, "Invalid path: absolute, no '..', outside /SYS and /vault.");
+        else if (f[WA_F_COMMENT][0] && !valid_chars(f[WA_F_COMMENT], 1, 63, " ._-,()")) RESULT(400, "Invalid comment.");
         else if (nas_add_share(name, path, StrCmp(f[WA_F_READONLY], "on") == 0, f[WA_F_COMMENT]))
-            RESULT(200, "Carpeta '%s' guardada.", name);
-        else RESULT(409, "No caben más carpetas compartidas.");
+            RESULT(200, "Folder '%s' saved.", name);
+        else RESULT(409, "No room for more shared folders.");
     } else if (StrCmp(action, "share_delete") == 0) {
-        ksnprintf(what, sizeof(what), "eliminar carpeta compartida '%s'", name);
-        if (nas_remove_share(name)) RESULT(200, "Carpeta '%s' eliminada.", name);
-        else RESULT(404, "No existe la carpeta '%s'.", name);
+        ksnprintf(what, sizeof(what), "delete shared folder '%s'", name);
+        if (nas_remove_share(name)) RESULT(200, "Folder '%s' deleted.", name);
+        else RESULT(404, "No such folder '%s'.", name);
     } else if (StrNCmp(action, "snapshot_", 9) == 0) {
         U32 id = 0;
         for (const char* c = f[WA_F_NAME]; *c >= '0' && *c <= '9' && id < 100000; c++) id = id * 10 + (U32)(*c - '0');
         if (StrCmp(action, "snapshot_create") == 0) {
-            ksnprintf(what, sizeof(what), "crear instantánea%s%s", f[WA_F_COMMENT][0] ? ": " : "", f[WA_F_COMMENT]);
-            if (StrLen(f[WA_F_COMMENT]) > 63 || StrLen(f[WA_F_VALUE]) > 31) RESULT(400, "Nota o fecha demasiado largas.");
+            ksnprintf(what, sizeof(what), "create snapshot%s%s", f[WA_F_COMMENT][0] ? ": " : "", f[WA_F_COMMENT]);
+            if (StrLen(f[WA_F_COMMENT]) > 63 || StrLen(f[WA_F_VALUE]) > 31) RESULT(400, "Note or date too long.");
             else if (snapshot_create(who, f[WA_F_COMMENT], f[WA_F_VALUE], FALSE, NULL, msg, msg_max)) status = 200;
             else status = 409;
         } else if (StrCmp(action, "snapshot_delete") == 0) {
-            ksnprintf(what, sizeof(what), "eliminar instantánea %u", id);
+            ksnprintf(what, sizeof(what), "delete snapshot %u", id);
             status = snapshot_delete(id, msg, msg_max) ? 200 : 404;
         } else if (StrCmp(action, "snapshot_restore") == 0) {
-            ksnprintf(what, sizeof(what), "restaurar %s de la instantánea %u", f[WA_F_PATH][0] ? f[WA_F_PATH] : "todo", id);
+            ksnprintf(what, sizeof(what), "restore %s from snapshot %u", f[WA_F_PATH][0] ? f[WA_F_PATH] : "everything", id);
             status = snapshot_restore(id, f[WA_F_PATH], msg, msg_max) ? 200 : 409;
         } else if (StrCmp(action, "snapshot_auto") == 0) {
             U32 minutes = 0, keep = 0;
@@ -928,33 +928,33 @@ I32 webadmin_action(const char* sid, U32 ip, const char* action, const char* con
             while (*c >= '0' && *c <= '9' && minutes < 1000000) minutes = minutes * 10 + (U32)(*c++ - '0');
             if (*c == ':') c++;
             while (*c >= '0' && *c <= '9' && keep < 1000) keep = keep * 10 + (U32)(*c++ - '0');
-            ksnprintf(what, sizeof(what), "instantáneas automáticas: cada %u min, conservar %u", minutes, keep);
+            ksnprintf(what, sizeof(what), "automatic snapshots: every %u min, keep %u", minutes, keep);
             status = snapshot_set_auto(minutes, keep, msg, msg_max) ? 200 : 400;
         } else {
-            RESULT(404, "Acción desconocida.");
+            RESULT(404, "Unknown action.");
         }
     } else if (StrCmp(action, "export_begin") == 0 || StrCmp(action, "import_begin") == 0) {
         Bool exp = action[0] == 'e';
         U32 id = 0;
         for (const char* c = f[WA_F_NAME]; *c >= '0' && *c <= '9' && id < 100000; c++) id = id * 10 + (U32)(*c - '0');
-        ksnprintf(what, sizeof(what), exp ? "réplica: exportar la instantánea %u" : "réplica: restaurar %u archivos en este NAS", id);
-        RESULT(200, exp ? "Exportación de la instantánea %u registrada." : "Restauración de %u archivos registrada.", id);
+        ksnprintf(what, sizeof(what), exp ? "replica: export snapshot %u" : "replica: restore %u files into this NAS", id);
+        RESULT(200, exp ? "Export of snapshot %u recorded." : "Restore of %u files recorded.", id);
     } else if (StrCmp(action, "fs_check") == 0) {
-        ksnprintf(what, sizeof(what), "comprobar el sistema de archivos");
+        ksnprintf(what, sizeof(what), "check the file system");
         RedSeaFsckReport r;
         if (redsea_eml_fsck(TRUE, TRUE, &r)) {
-            RESULT(200, "Sistema de archivos correcto: %u archivos, %u CRC correctos (%u con CRC antiguo), sin errores.",
+            RESULT(200, "File system OK: %u files, %u good CRCs (%u with the old CRC), no errors.",
                    r.files, r.crc_ok + r.crc_legacy, r.crc_legacy);
         } else {
-            RESULT(409, "Se encontraron %u error(es). Primero: %s", r.errors, r.first_problem);
+            RESULT(409, "%u error(s) found. First: %s", r.errors, r.first_problem);
         }
     } else if (StrCmp(action, "vault_lock") == 0) {
-        ksnprintf(what, sizeof(what), "bloquear la bóveda");
-        if (!vault_is_initialized()) RESULT(409, "La bóveda no está creada.");
-        else if (!vault_is_unlocked()) RESULT(200, "La bóveda ya estaba bloqueada.");
-        else { vault_lock(); RESULT(200, "Bóveda bloqueada: la clave se borró del key hart."); }
+        ksnprintf(what, sizeof(what), "lock the vault");
+        if (!vault_is_initialized()) RESULT(409, "The vault has not been created.");
+        else if (!vault_is_unlocked()) RESULT(200, "The vault was already locked.");
+        else { vault_lock(); RESULT(200, "Vault locked: the key was erased from the key hart."); }
     } else {
-        RESULT(404, "Acción desconocida.");
+        RESULT(404, "Unknown action.");
     }
     audit(who, ip, status == 200, what);
     return status;
@@ -1104,7 +1104,7 @@ I32 webadmin_export_vault_header(const char* sid, U32 ip, U8** out, size_t* out_
     char who[NAS_MAX_USERNAME_LEN];
     session_user(sid, ip, who, sizeof(who));
     *out = vault_export_header(out_len);
-    audit(who, ip, *out != NULL, "réplica: exportar la cabecera de la bóveda");
+    audit(who, ip, *out != NULL, "replica: export the vault header");
     return *out ? 0 : 404;
 }
 
@@ -1113,32 +1113,32 @@ I32 webadmin_import_file(const char* sid, U32 ip, const char* path, const U8* da
     char who[NAS_MAX_USERNAME_LEN];
     session_user(sid, ip, who, sizeof(who));
     if (!path || !replication_path_ok(path)) {
-        ksnprintf(msg, msg_max, "Ruta no válida (share/, media/ o vault/).");
+        ksnprintf(msg, msg_max, "Invalid path (share/, media/ or vault/).");
         return 400;
     }
     if (len > 16 * 1024 * 1024) {
-        ksnprintf(msg, msg_max, "Archivo demasiado grande (máximo 16 MiB).");
+        ksnprintf(msg, msg_max, "File too large (16 MiB at most).");
         return 400;
     }
     U32 flags = 0;
     if (StrNICmp(path, "vault/", 6) == 0) {
         if (!vault_is_initialized()) {
-            ksnprintf(msg, msg_max, "Restaura antes la cabecera de la bóveda.");
+            ksnprintf(msg, msg_max, "Restore the vault header first.");
             return 409;
         }
         if (!vault_blob_plausible(data, len)) {
-            ksnprintf(msg, msg_max, "No es un archivo cifrado de la bóveda.");
+            ksnprintf(msg, msg_max, "Not an encrypted vault file.");
             return 400;
         }
         flags = REDSEA_FLAG_ENCRYPTED;
     }
     static const U8 empty = 0;
     if (!redsea_eml_write_file_path(path, len ? data : &empty, len, flags)) {
-        ksnprintf(msg, msg_max, "No se pudo escribir '%s' (disco o directorio lleno).", path);
+        ksnprintf(msg, msg_max, "'%s' could not be written (disk or directory full).", path);
         return 507;
     }
     kprintf("[REPLICA] %s restored '%s' (%u bytes)\n", who, path, (U32)len);
-    ksnprintf(msg, msg_max, "Restaurado '%s'.", path);
+    ksnprintf(msg, msg_max, "Restored '%s'.", path);
     return 200;
 }
 
@@ -1148,9 +1148,9 @@ I32 webadmin_import_vault_header(const char* sid, U32 ip, const U8* data, size_t
     session_user(sid, ip, who, sizeof(who));
     VaultResult r = vault_import_header(data, len);
     I32 status = 200;
-    if (r == VAULT_OK) ksnprintf(msg, msg_max, "Cabecera de la bóveda restaurada: desbloquéala con su frase de paso.");
-    else if (r == VAULT_ERR_ALREADY_INITIALIZED) { ksnprintf(msg, msg_max, "Este NAS ya tiene una bóveda; no se sobrescribe."); status = 409; }
-    else { ksnprintf(msg, msg_max, "Cabecera no válida (%s).", vault_result_str(r)); status = 400; }
-    audit(who, ip, status == 200, "réplica: restaurar la cabecera de la bóveda");
+    if (r == VAULT_OK) ksnprintf(msg, msg_max, "Vault header restored: unlock it with its passphrase.");
+    else if (r == VAULT_ERR_ALREADY_INITIALIZED) { ksnprintf(msg, msg_max, "This NAS already has a vault; it is not overwritten."); status = 409; }
+    else { ksnprintf(msg, msg_max, "Invalid header (%s).", vault_result_str(r)); status = 400; }
+    audit(who, ip, status == 200, "replica: restore the vault header");
     return status;
 }
