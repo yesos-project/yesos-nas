@@ -12,8 +12,11 @@ separate product YesOS Security.
 - **Protection of the data:** snapshots in a read-only `/backup`, encrypted replication to another machine, fsck and power-cut safety.
 - **Console:** serial (UART); there is no display.
 
+Requirements (clang, lld, llvm, QEMU, Rust, Python): see the
+[yesos-core README](https://github.com/yesos-project/yesos-core#readme).
+
 ```bash
-git clone --recurse-submodules <url>/yesos-nas      # or: git submodule update --init
+git clone --recurse-submodules https://github.com/yesos-project/yesos-nas && cd yesos-nas
 make prover-setup        # once (Z3, in core/tools/.venv)
 make                     # yesos.elf
 make run                 # serial console (Ctrl-A X to quit); panel at https://127.0.0.1:8443/
