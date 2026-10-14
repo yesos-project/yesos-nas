@@ -50,7 +50,7 @@ creates it.
 
 The kernel's WebDAV server (`rust/src/http.rs`) runs on a small stateful TCP layer: random initial sequence numbers, in-order reassembly of requests (`Content-Length`, `chunked`, `Expect: 100-continue`), responses sent within the client's receive window and retransmitted (go-back-N) from a main-loop timer. Files are stored persistently on RedSea as `<share>/<name>` (`share`, `media`; `backup` is read-only; `vault` is never exposed), up to 16 MiB each. RedSea stores full paths of up to 223 characters (v4: 16384 directory entries, see the core's README). Longer names get a clear `400`; listings percent-encode `href`s and XML-escape names. `python3 tools/test_webdav.py [file]` checks byte-identical round trips (an image, 3 MiB of random data, a chunked upload), listing, persistence across reboot and deletion.
 
-There is no content-entropy "anti-ransomware" filter: it could not tell photos, audio, archives or encrypted backups from ransomware, so it was removed. Ransomware protection relies on snapshots in the read-only `/backup` area (section 12).
+There is no content-entropy "anti-ransomware" filter: it could not tell photos, audio, archives or encrypted backups from ransomware, so it was removed. Ransomware protection relies on snapshots in the read-only `/backup` area (section 3).
 
 ### Web administration (`https://<ip>:8443/`) — `src/webadmin.c`, `rust/src/webadmin.rs`, `rust/src/tls.rs`
 An OpenMediaVault-style panel. Pages: Overview, Disks, File system, Shared folders, Snapshots, Users, Devices, Network and services, Security and Activity log. It shows only real kernel state; S.M.A.R.T. is reported as unavailable.
@@ -84,7 +84,7 @@ An OpenMediaVault-style panel. Pages: Overview, Disks, File system, Shared folde
   - the kernel DRBG for randomness.
 - TLS 1.2, session tickets, resumption and 0-RTT are off. Clients that offer another group first are steered to X25519 with a HelloRetryRequest.
 - **Certificate:** self-signed, hand-built X.509 v3. SAN: `yesos.local`, `localhost`, the NAS IP and `127.0.0.1`. It is derived deterministically from the key in `SYS/TLS.KEY`, which is created on first boot, so its SHA-256 fingerprint stays the same across reboots. The boot log and the `tls` console command print it. The first time a browser warns, accept the certificate only if the fingerprint it shows matches.
-- WebDAV is served only at `https://<ip>:8443/dav/` and needs a NAS account (see section 11). On port 8080, `GET` redirects to HTTPS and everything else is refused.
+- WebDAV is served only at `https://<ip>:8443/dav/` and needs a NAS account (see section 1). On port 8080, `GET` redirects to HTTPS and everything else is refused.
 - A handshake takes about 3 ms under QEMU. Each request opens its own connection (`Connection: close`).
 - **Pending:**
   - `SYS/TLS.KEY`, like `SYS/NOISE.KEY`, is stored unencrypted on the disk.
@@ -242,8 +242,15 @@ Packages    pkg [list|install <f.ypk>|run <app>|remove <app>]
 - The vault can be locked from the panel but only unlocked at the console.
 - The HTTPS certificate is self-signed (verify its fingerprint with `tls`), and its key in `SYS/TLS.KEY` is unencrypted.
 
-## 9. License
+## 9. Support YesOS
 
+YesOS is developed in the open and funded by donations. They pay for
+development time and for real RISC-V boards, so the missing storage and
+network drivers can be written and tested outside the emulator.
+
+[Donate on Liberapay](https://liberapay.com/yesos-project/donate)
+
+## 10. License
 MIT. In memory of Terry A. Davis (1969–2018).
 
 YesOS is inspired by his TempleOS (its HolyC became HolyQ here, and the RedSea
