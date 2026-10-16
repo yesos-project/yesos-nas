@@ -8,7 +8,7 @@
 PRODUCT = nas
 CORE_MODULES = vault packages
 # The Desktop's drivers must never be linked into this product.
-FORBIDDEN_SYMBOLS = hda_ display_ input_ terminal_ wav_ desktop_
+FORBIDDEN_SYMBOLS = hda_ display_ input_ terminal_ wav_ desktop_ surf_
 PRODUCT_C_SRCS = $(wildcard src/*.c)
 CUSTOM_DISK = 1
 
