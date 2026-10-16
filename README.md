@@ -13,6 +13,12 @@ TLS 1.3 in the kernel, snapshots and encrypted replication.**
 
 [Quick start](#quick-start) · [Accounts](#1-accounts-and-network-exposure) · [Web panel](#2-webdav-and-the-web-panel) · [Snapshots](#3-snapshots-backup--srcsnapshotc) · [Tests](#6-test-suites) · [Limits](#8-honest-limits) · [YesOS core](https://github.com/yesos-project/yesos-core)
 
+<br>
+
+<img src="docs/panel.png" width="820" alt="The YesOS NAS web panel, Overview page: system, storage, vault, security (PMP locked, proven with Z3) and access">
+
+<sub>The real panel, served by the NAS over TLS 1.3 in QEMU: Firefox logged in as an admin from an admitted device. Made by <code>tools/screenshot.py</code>.</sub>
+
 </div>
 
 ---
