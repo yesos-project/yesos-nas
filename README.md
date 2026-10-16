@@ -4,8 +4,10 @@ A network storage appliance built on the YesOS core (the `core` git
 submodule): Machine mode only, a locked Z3-proven PMP, an integer-only kernel
 (no floating point, checked at every build), no Linux, libc or binary blobs. It is **only a NAS**: it has no gateway, firewall or DNS code (the router
 already filters DNS) and talks only to the private LAN (the core's RFC 1918
-filter), to keep its attack surface small. The bridge firewall is the
-separate product YesOS Security.
+filter), to keep its attack surface small. For the same reason it has no
+font, no console line editor and none of the Desktop's drivers (audio,
+display, input): the build refuses an image that contains them. The bridge
+firewall is the separate product YesOS Security.
 
 - **Storage:** RedSea v4 with snapshots, encrypted `/vault` (core modules).
 - **Access:** web panel and WebDAV over **HTTPS, TLS 1.3 in the kernel** (TCP 8443); NAS protocol over **Noise NK** (UDP 31415); Argon2id accounts; device admission at the console.
