@@ -1,8 +1,26 @@
-# YesOS NAS (RISC-V)
+<div align="center">
+
+# YesOS NAS
+
+**Network storage on bare-metal RISC-V: WebDAV and a web panel over<br>
+TLS 1.3 in the kernel, snapshots and encrypted replication.**
+
+<img alt="RISC-V RV64GCV" src="https://img.shields.io/badge/RISC--V-RV64GCV-283272?logo=riscv&logoColor=white">
+<img alt="Machine mode only" src="https://img.shields.io/badge/runs%20in-Machine%20mode-4a5568">
+<img alt="PMP proven with Z3" src="https://img.shields.io/badge/PMP-proven%20with%20Z3-6b46c1">
+<img alt="No floating point" src="https://img.shields.io/badge/floating%20point-none%2C%20checked-2f855a">
+<img alt="License MIT" src="https://img.shields.io/badge/license-MIT-2b6cb0">
+
+[Quick start](#quick-start) · [Accounts](#1-accounts-and-network-exposure) · [Web panel](#2-webdav-and-the-web-panel) · [Snapshots](#3-snapshots-backup--srcsnapshotc) · [Tests](#6-test-suites) · [Limits](#8-honest-limits) · [YesOS core](https://github.com/yesos-project/yesos-core)
+
+</div>
+
+---
 
 A network storage appliance built on the YesOS core (the `core` git
 submodule): Machine mode only, a locked Z3-proven PMP, an integer-only kernel
-(no floating point, checked at every build), no Linux, libc or binary blobs. It is **only a NAS**: it has no gateway, firewall or DNS code (the router
+(no floating point, checked at every build), no Linux, libc or binary blobs.
+It is **only a NAS**: it has no gateway, firewall or DNS code (the router
 already filters DNS) and talks only to the private LAN (the core's RFC 1918
 filter), to keep its attack surface small. For the same reason it has no
 font, no console line editor and none of the Desktop's drivers (audio,
@@ -16,6 +34,8 @@ firewall is the separate product YesOS Security.
 
 Design choices, a comparison with Linux, seL4, Zephyr and TempleOS, and what is
 measured today: see the [yesos-core README](https://github.com/yesos-project/yesos-core#2-design-choices).
+
+## Quick start
 
 Requirements (clang, lld, llvm, QEMU, Rust, Python): see the
 [yesos-core README](https://github.com/yesos-project/yesos-core#readme).
