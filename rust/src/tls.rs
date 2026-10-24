@@ -375,16 +375,15 @@ impl Tls13AeadAlgorithm for Aead {
 
 impl MessageEncrypter for RecordCipher {
     fn encrypt(&mut self, msg: OutboundPlainMessage<'_>, seq: u64) -> Result<OutboundOpaqueMessage, Error> {
+        // Encrypted in place in the outgoing payload: no second buffer, and
+        // so no plaintext copy left to wipe.
         let total = self.encrypted_payload_len(msg.payload.len());
-        let mut buf = Vec::with_capacity(total);
-        msg.payload.copy_to_vec(&mut buf);
-        buf.extend_from_slice(&msg.typ.to_array());
-        let nonce = Nonce::new(&self.iv, seq).0;
-        let tag = self.cipher.seal(&nonce, &make_tls13_aad(total), &mut buf).ok_or(Error::EncryptError)?;
         let mut payload = PrefixedPayload::with_capacity(total);
-        payload.extend_from_slice(&buf);
+        payload.extend_from_chunks(&msg.payload);
+        payload.extend_from_slice(&msg.typ.to_array());
+        let nonce = Nonce::new(&self.iv, seq).0;
+        let tag = self.cipher.seal(&nonce, &make_tls13_aad(total), payload.as_mut()).ok_or(Error::EncryptError)?;
         payload.extend_from_slice(&tag);
-        buf.zeroize();
         Ok(OutboundOpaqueMessage::new(ContentType::ApplicationData, ProtocolVersion::TLSv1_2, payload))
     }
 
@@ -770,20 +769,30 @@ impl TlsConn {
             Ok(ConnectionState::WriteTraffic(w)) => w,
             _ => return false,
         };
-        let mut buf = vec![0u8; 16 * 1024 + 256];
-        for chunk in data.chunks(16 * 1024) {
+        // Records are written straight into out_tls, reserved once for all of
+        // them (our own data: its size is known), not via a bounce buffer.
+        const REC: usize = 16 * 1024;
+        out_tls.reserve(data.len() + (data.len() / REC + 2) * 64);
+        for chunk in data.chunks(REC) {
+            let start = out_tls.len();
+            let mut need = chunk.len() + 64;                    // header 5, content type 1, tag 16
             loop {
-                match w.encrypt(chunk, &mut buf) {
+                out_tls.resize(start + need, 0);
+                match w.encrypt(chunk, &mut out_tls[start..]) {
                     Ok(n) => {
-                        out_tls.extend_from_slice(&buf[..n]);
+                        out_tls.truncate(start + n);
                         break;
                     }
-                    Err(EncryptError::InsufficientSize(s)) => buf.resize(s.required_size, 0),
-                    Err(_) => return false,
+                    Err(EncryptError::InsufficientSize(s)) => need = s.required_size,
+                    Err(_) => {
+                        out_tls.truncate(start);
+                        return false;
+                    }
                 }
             }
         }
         if close {
+            let mut buf = vec![0u8; 256];
             loop {
                 match w.queue_close_notify(&mut buf) {
                     Ok(n) => {

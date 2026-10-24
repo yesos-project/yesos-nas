@@ -22,6 +22,9 @@ pub const TCP_URG: u8 = 0x20;
 
 extern "C" {
     fn virtio_net_send_raw(frame: *const u8, len: usize) -> bool;
+    /// Internet checksum, RFC 1071 (core kernel/net_csum.c)
+    fn net_csum_add(data: *const u8, len: usize, sum: u32) -> u32;
+    fn net_csum_fold(sum: u32) -> u16;
     fn webui_read_file(filename: *const u8, buf: *mut u8, max_len: usize) -> i32;
     fn webui_write_file(filename: *const u8, data: *const u8, size: usize) -> i32;
     fn webui_delete_file(filename: *const u8) -> i32;
@@ -223,22 +226,10 @@ impl<'a> BufferWriter<'a> {
 // -----------------------------------------------------------------------------
 // Internet Protocol Checksums (RFC 791 / RFC 793)
 // -----------------------------------------------------------------------------
+/// The IPv4 header checksum, by the core's word-wide Internet checksum.
 fn calc_ipv4_checksum(header: &[u8]) -> u16 {
-    let mut sum = 0u32;
-    let mut i = 0;
-    while i + 1 < header.len() {
-        let w = u16::from_be_bytes([header[i], header[i + 1]]);
-        sum = sum.wrapping_add(w as u32);
-        i += 2;
-    }
-    if i < header.len() {
-        let w = (header[i] as u32) << 8;
-        sum = sum.wrapping_add(w);
-    }
-    while (sum >> 16) != 0 {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-    !(sum as u16)
+    // SAFETY: the pointer is valid for header.len() bytes.
+    unsafe { net_csum_fold(net_csum_add(header.as_ptr(), header.len(), 0)) }
 }
 
 fn calc_tcp_checksum(src_ip: [u8; 4], dst_ip: [u8; 4], tcp_segment: &[u8]) -> u16 {
@@ -250,22 +241,9 @@ fn calc_tcp_checksum(src_ip: [u8; 4], dst_ip: [u8; 4], tcp_segment: &[u8]) -> u1
     sum = sum.wrapping_add(u16::from_be_bytes([dst_ip[2], dst_ip[3]]) as u32);
     sum = sum.wrapping_add(6u32); // Protocol TCP
     sum = sum.wrapping_add(tcp_segment.len() as u32); // TCP Length
-
-    // TCP segment (header + payload)
-    let mut i = 0;
-    while i + 1 < tcp_segment.len() {
-        let w = u16::from_be_bytes([tcp_segment[i], tcp_segment[i + 1]]);
-        sum = sum.wrapping_add(w as u32);
-        i += 2;
-    }
-    if i < tcp_segment.len() {
-        let w = (tcp_segment[i] as u32) << 8;
-        sum = sum.wrapping_add(w);
-    }
-    while (sum >> 16) != 0 {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-    !(sum as u16)
+    // TCP segment (header + payload), by the core's word-wide checksum
+    // SAFETY: the pointer is valid for tcp_segment.len() bytes.
+    unsafe { net_csum_fold(net_csum_add(tcp_segment.as_ptr(), tcp_segment.len(), sum)) }
 }
 
 // -----------------------------------------------------------------------------
@@ -368,10 +346,15 @@ fn send_http_response_stream_ext(
         hw.write_str(extra_headers);
     }
     hw.write_str("\r\nConnection: close\r\n\r\n");
-    let mut out = Vec::with_capacity(hw.as_bytes().len() + body.len());
-    out.extend_from_slice(hw.as_bytes());
-    out.extend_from_slice(body);
-    tcp_queue(dst_ip, dst_port, &out, true);
+    if body.len() <= 4096 {
+        // small: one buffer, so one TLS record
+        let mut out = Vec::with_capacity(hw.as_bytes().len() + body.len());
+        out.extend_from_slice(hw.as_bytes());
+        out.extend_from_slice(body);
+        tcp_queue(dst_ip, dst_port, &[&out], true);
+    } else {
+        tcp_queue(dst_ip, dst_port, &[hw.as_bytes(), body], true);   // no copy of the body
+    }
 }
 
 /// Response on the connection to (ip, port), used by the web admin module.
@@ -949,11 +932,9 @@ fn wipe_vec(v: &mut Vec<u8>) {
 fn conn_write_app(c: &mut TcpConn, data: &[u8], final_: bool) {
     match c.tls.as_mut() {
         Some(t) => {
-            let mut out = Vec::new();
-            if !t.write(data, final_, &mut out) {
+            if !t.write(data, final_, &mut c.tx) {
                 t.failed = true;
             }
-            c.tx.extend_from_slice(&out);
         }
         None => c.tx.extend_from_slice(data),
     }
@@ -1010,11 +991,15 @@ fn conn_pump(c: &mut TcpConn) {
 }
 
 /// Queues response bytes on the connection to (ip, port) and starts sending.
-fn tcp_queue(ip: [u8; 4], port: u16, data: &[u8], final_: bool) -> bool {
+/// Queues `parts`, in order, on the connection to (ip, port); `final_`
+/// closes it after the last one.
+fn tcp_queue(ip: [u8; 4], port: u16, parts: &[&[u8]], final_: bool) -> bool {
     TCP_CONNS.with(|conns| match find_conn(conns, ip, port) {
         Some(i) => {
             let c = conns[i].as_mut().unwrap();
-            conn_write_app(c, data, final_);
+            for (k, part) in parts.iter().enumerate() {
+                conn_write_app(c, part, final_ && k + 1 == parts.len());
+            }
             c.last_ms = now_ms();
             conn_pump(c);
             true
@@ -1264,13 +1249,9 @@ pub extern "C" fn rust_handle_tcp(buf: *const u8, len: usize, ip_hdr_len: usize)
                     c.rcv_nxt = c.rcv_nxt.wrapping_add(payload.len() as u32);
                     let mut have_data = true;
                     if let Some(t) = c.tls.as_mut() {
-                        let mut out = Vec::new();
-                        let mut plain = Vec::new();
-                        t.feed(payload, &mut out, &mut plain);
+                        // Handshake bytes go straight to tx, plaintext straight to rx.
+                        t.feed(payload, &mut c.tx, &mut c.rx);
                         let failed = t.failed;
-                        c.tx.extend_from_slice(&out);
-                        c.rx.extend_from_slice(&plain);
-                        wipe(&mut plain);
                         if failed {
                             // Alert (if any) goes out, then the connection closes.
                             c.request_taken = true;
