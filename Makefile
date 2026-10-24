@@ -6,7 +6,7 @@
 # Panel: https://127.0.0.1:8443/   WebDAV: https://127.0.0.1:8443/dav/   Exit QEMU: Ctrl-A X
 # =============================================================================
 PRODUCT = nas
-CORE_MODULES = vault packages
+CORE_MODULES = vault packages chacha
 # The Desktop's drivers must never be linked into this product.
 FORBIDDEN_SYMBOLS = hda_ audio_ display_ input_ terminal_ wav_ desktop_ surf_ files_
 PRODUCT_C_SRCS = $(wildcard src/*.c)

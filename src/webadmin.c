@@ -18,10 +18,12 @@
 #include "security_pin.h"
 #include "vfs.h"
 #include "snapshot.h"
+#include "chacha20.h"
 #include "kprintf.h"
 
 // rust_core/src/tls.rs
 I32 yc_tls_init(const U8* key32, const U8* nas_ip4, U8* fp_out32);
+I32 yc_tls_chacha_kat(U0);
 I32 yc_tls_fingerprint(U8* fp_out32);
 
 // ----------------------------------------------------------------------------
@@ -743,6 +745,12 @@ U0 webadmin_tls_init(U0) {
     if (r != 0) {
         kprintf("[TLS] ERROR: TLS configuration failed (%d); HTTPS disabled.\n", r);
         return;
+    }
+    if (yc_tls_chacha_kat() == 1) {
+        kprintf("[TLS] ChaCha20-Poly1305 known-answer test (RFC 8439 2.8.2) OK, %s ChaCha20\n",
+                cc20_has_rvv() ? "vector (RVV)" : "scalar");
+    } else {
+        kprintf("[TLS] WARNING: ChaCha20-Poly1305 known-answer test FAILED: suite not offered (AES-128-GCM only)\n");
     }
     g_tls_ready = TRUE;
     kprintf("[TLS] HTTPS admin panel on TCP %u (TLS 1.3, %s self-signed ECDSA P-256 certificate).\n",

@@ -18,7 +18,7 @@ codegen-units = 1
 [dependencies]
 yesos_core = { path = "../core/rust" }
 zeroize = { version = "1", default-features = false }
-chacha20poly1305 = { version = "0.10", default-features = false }
+poly1305 = { version = "0.8", default-features = false }
 curve25519-dalek = { version = "4", default-features = false }
 snow = { version = "0.10", default-features = false, features = ["default-resolver", "use-chacha20poly1305", "use-blake2", "use-curve25519"] }
 rustls = { version = "0.23", default-features = false }

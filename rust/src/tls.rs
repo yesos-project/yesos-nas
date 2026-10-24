@@ -19,7 +19,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use chacha20poly1305::aead::{AeadInPlace, KeyInit};
+use aes_gcm::aead::{AeadInPlace, KeyInit};
+use poly1305::universal_hash::UniversalHash;
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use hmac::Mac;
 use p256::ecdsa::signature::Signer as _;
@@ -65,6 +66,9 @@ impl SecureRandom for KernelRng {
 
 extern "C" {
     fn timer_get_uptime_ms() -> u64;
+    /// The core's ChaCha20 keystream (module "chacha", kernel/chacha20.c):
+    /// data ^= keystream from block `counter`; RVV when the hart has V.
+    fn cc20_xor(key: *const u8, nonce: *const u8, counter: u32, data: *mut u8, len: usize);
 }
 
 /// The NAS has no trusted wall clock. Time is only used by rustls for ticket
@@ -220,21 +224,124 @@ enum AeadKind {
 struct Aead(AeadKind);
 
 enum Cipher {
-    ChaCha(chacha20poly1305::ChaCha20Poly1305),
+    ChaCha(ChaChaPoly),
     Aes(aes_gcm::Aes128Gcm),
+}
+
+/// ChaCha20-Poly1305 (RFC 8439 2.8): the keystream from the core's cc20_xor
+/// (vector code), Poly1305 from RustCrypto. The one-time Poly1305 key is
+/// block 0 of the keystream, the data uses blocks 1 onwards; the tag covers
+/// aad, ciphertext and both lengths, and is checked in constant time before
+/// anything is decrypted.
+struct ChaChaPoly {
+    key: [u8; 32],
+}
+
+impl Drop for ChaChaPoly {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
+}
+
+impl ChaChaPoly {
+    fn new(key: &[u8]) -> Self {
+        let mut k = [0u8; 32];
+        k.copy_from_slice(key);
+        ChaChaPoly { key: k }
+    }
+
+    fn xor(&self, nonce: &[u8; 12], counter: u32, data: &mut [u8]) {
+        // SAFETY: key and nonce are 32 and 12 bytes; data is valid for its length.
+        unsafe { cc20_xor(self.key.as_ptr(), nonce.as_ptr(), counter, data.as_mut_ptr(), data.len()) }
+    }
+
+    fn mac(&self, nonce: &[u8; 12]) -> poly1305::Poly1305 {
+        let mut otk = [0u8; 32];
+        self.xor(nonce, 0, &mut otk);
+        let m = poly1305::Poly1305::new(poly1305::Key::from_slice(&otk));
+        otk.zeroize();
+        m
+    }
+
+    fn tag(&self, nonce: &[u8; 12], aad: &[u8], ct: &[u8]) -> poly1305::Poly1305 {
+        let mut m = self.mac(nonce);
+        m.update_padded(aad);
+        m.update_padded(ct);
+        let mut lens = poly1305::Block::default();
+        lens[..8].copy_from_slice(&(aad.len() as u64).to_le_bytes());
+        lens[8..].copy_from_slice(&(ct.len() as u64).to_le_bytes());
+        m.update(&[lens]);
+        m
+    }
+
+    fn seal(&self, nonce: &[u8; 12], aad: &[u8], buf: &mut [u8]) -> [u8; 16] {
+        self.xor(nonce, 1, buf);
+        let mut t = [0u8; 16];
+        t.copy_from_slice(&self.tag(nonce, aad, buf).finalize());
+        t
+    }
+
+    fn open(&self, nonce: &[u8; 12], aad: &[u8], buf: &mut [u8], tag: &[u8; 16]) -> bool {
+        if self.tag(nonce, aad, buf).verify(tag.into()).is_err() {
+            return false;
+        }
+        self.xor(nonce, 1, buf);
+        true
+    }
+}
+
+/// RFC 8439 2.8.2 known-answer test of ChaChaPoly: sealing, opening, and a
+/// flipped tag bit refused. The NAS offers the suite only if it passes.
+fn chacha_poly_kat() -> bool {
+    const PT: &[u8] = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
+    const CT: [u8; 114] = [
+        0xd3, 0x1a, 0x8d, 0x34, 0x64, 0x8e, 0x60, 0xdb, 0x7b, 0x86, 0xaf, 0xbc, 0x53, 0xef, 0x7e, 0xc2, 0xa4, 0xad, 0xed, 0x51,
+        0x29, 0x6e, 0x08, 0xfe, 0xa9, 0xe2, 0xb5, 0xa7, 0x36, 0xee, 0x62, 0xd6, 0x3d, 0xbe, 0xa4, 0x5e, 0x8c, 0xa9, 0x67, 0x12,
+        0x82, 0xfa, 0xfb, 0x69, 0xda, 0x92, 0x72, 0x8b, 0x1a, 0x71, 0xde, 0x0a, 0x9e, 0x06, 0x0b, 0x29, 0x05, 0xd6, 0xa5, 0xb6,
+        0x7e, 0xcd, 0x3b, 0x36, 0x92, 0xdd, 0xbd, 0x7f, 0x2d, 0x77, 0x8b, 0x8c, 0x98, 0x03, 0xae, 0xe3, 0x28, 0x09, 0x1b, 0x58,
+        0xfa, 0xb3, 0x24, 0xe4, 0xfa, 0xd6, 0x75, 0x94, 0x55, 0x85, 0x80, 0x8b, 0x48, 0x31, 0xd7, 0xbc, 0x3f, 0xf4, 0xde, 0xf0,
+        0x8e, 0x4b, 0x7a, 0x9d, 0xe5, 0x76, 0xd2, 0x65, 0x86, 0xce, 0xc6, 0x4b, 0x61, 0x16,
+    ];
+    const TAG: [u8; 16] = [0x1a, 0xe1, 0x0b, 0x59, 0x4f, 0x09, 0xe2, 0x6a, 0x7e, 0x90, 0x2e, 0xcb, 0xd0, 0x60, 0x06, 0x91];
+    let mut key = [0u8; 32];
+    for (i, b) in key.iter_mut().enumerate() {
+        *b = 0x80 + i as u8;
+    }
+    let nonce = [0x07, 0, 0, 0, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47];
+    let aad = [0x50, 0x51, 0x52, 0x53, 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7];
+    let c = ChaChaPoly::new(&key);
+    let mut buf = [0u8; 114];
+    buf.copy_from_slice(PT);
+    let tag = c.seal(&nonce, &aad, &mut buf);
+    let sealed = buf == CT && tag == TAG;
+    let opened = c.open(&nonce, &aad, &mut buf, &TAG) && buf == *PT;
+    let mut bad = TAG;
+    bad[0] ^= 1;
+    let mut buf2 = CT;
+    let refused = !c.open(&nonce, &aad, &mut buf2, &bad) && buf2 == CT;
+    sealed && opened && refused
+}
+
+static CHACHA_KAT: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
+
+/// 1 if the ChaCha20-Poly1305 known-answer test passed (and the suite is
+/// offered), 0 if it failed, -1 before yc_tls_init.
+#[no_mangle]
+pub extern "C" fn yc_tls_chacha_kat() -> i32 {
+    CHACHA_KAT.load(core::sync::atomic::Ordering::Relaxed)
 }
 
 impl Cipher {
     fn new(kind: AeadKind, key: &[u8]) -> Self {
         match kind {
-            AeadKind::ChaCha20Poly1305 => Cipher::ChaCha(chacha20poly1305::ChaCha20Poly1305::new_from_slice(key).expect("key")),
+            AeadKind::ChaCha20Poly1305 => Cipher::ChaCha(ChaChaPoly::new(key)),
             AeadKind::Aes128Gcm => Cipher::Aes(aes_gcm::Aes128Gcm::new_from_slice(key).expect("key")),
         }
     }
 
     fn seal(&self, nonce: &[u8; 12], aad: &[u8], buf: &mut [u8]) -> Option<[u8; 16]> {
         let tag = match self {
-            Cipher::ChaCha(c) => c.encrypt_in_place_detached(nonce.into(), aad, buf).ok()?,
+            Cipher::ChaCha(c) => return Some(c.seal(nonce, aad, buf)),
             Cipher::Aes(c) => c.encrypt_in_place_detached(nonce.into(), aad, buf).ok()?,
         };
         let mut t = [0u8; 16];
@@ -244,7 +351,7 @@ impl Cipher {
 
     fn open(&self, nonce: &[u8; 12], aad: &[u8], buf: &mut [u8], tag: &[u8; 16]) -> bool {
         match self {
-            Cipher::ChaCha(c) => c.decrypt_in_place_detached(nonce.into(), aad, buf, tag.into()).is_ok(),
+            Cipher::ChaCha(c) => c.open(nonce, aad, buf, tag),
             Cipher::Aes(c) => c.decrypt_in_place_detached(nonce.into(), aad, buf, tag.into()).is_ok(),
         }
     }
@@ -526,11 +633,15 @@ pub extern "C" fn yc_tls_init(key: *const u8, nas_ip: *const u8, fp_out: *mut u8
     let mut fp = [0u8; 32];
     fp.copy_from_slice(&Sha256::digest(&cert));
 
+    let kat = chacha_poly_kat();
+    CHACHA_KAT.store(kat as i32, core::sync::atomic::Ordering::Relaxed);
+    let mut suites = Vec::new();
+    if kat {
+        suites.push(SupportedCipherSuite::Tls13(&TLS13_CHACHA20_POLY1305_SHA256));
+    }
+    suites.push(SupportedCipherSuite::Tls13(&TLS13_AES_128_GCM_SHA256));
     let provider = Arc::new(CryptoProvider {
-        cipher_suites: vec![
-            SupportedCipherSuite::Tls13(&TLS13_CHACHA20_POLY1305_SHA256),
-            SupportedCipherSuite::Tls13(&TLS13_AES_128_GCM_SHA256),
-        ],
+        cipher_suites: suites,
         kx_groups: vec![&X25519_GROUP],
         signature_verification_algorithms: WebPkiSupportedAlgorithms { all: &[], mapping: &[] },
         secure_random: &KERNEL_RNG,

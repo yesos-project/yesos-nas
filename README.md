@@ -112,7 +112,10 @@ An OpenMediaVault-style panel. Pages: Overview, Disks, File system, Shared folde
 **HTTPS (TLS 1.3 in the kernel).** The panel and its API are served only on TCP 8443. On port 8080, `/` and `/login` redirect to HTTPS, and the API answers `403 https_required`, so a session cookie is useless over plain HTTP. The cookie also carries `Secure`.
 - rustls runs in `no_std` mode through its unbuffered API, driven by the kernel's TCP layer. It uses a small crypto provider built on RustCrypto (`rust/src/tls.rs`):
   - X25519 key exchange;
-  - `TLS13_CHACHA20_POLY1305_SHA256` and `TLS13_AES_128_GCM_SHA256`;
+  - `TLS13_CHACHA20_POLY1305_SHA256` and `TLS13_AES_128_GCM_SHA256`; ChaCha20 is the core's
+    vector code (module `chacha`, RVV 1.0 when the hart has V) with RustCrypto's Poly1305,
+    assembled as in RFC 8439 2.8; at boot it must pass the RFC's known-answer test (seal, open,
+    a flipped tag bit refused), or the suite is not offered;
   - SHA-256 and HMAC-SHA-256 for HKDF;
   - ECDSA P-256 signatures (RFC 6979);
   - the kernel DRBG for randomness.
