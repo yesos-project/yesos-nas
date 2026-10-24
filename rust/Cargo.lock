@@ -685,7 +685,6 @@ dependencies = [
  "curve25519-dalek",
  "hmac",
  "p256",
- "poly1305",
  "rustls",
  "sha2",
  "snow",

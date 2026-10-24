@@ -20,7 +20,6 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use aes_gcm::aead::{AeadInPlace, KeyInit};
-use poly1305::universal_hash::UniversalHash;
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use hmac::Mac;
 use p256::ecdsa::signature::Signer as _;
@@ -69,6 +68,8 @@ extern "C" {
     /// The core's ChaCha20 keystream (module "chacha", kernel/chacha20.c):
     /// data ^= keystream from block `counter`; RVV when the hart has V.
     fn cc20_xor(key: *const u8, nonce: *const u8, counter: u32, data: *mut u8, len: usize);
+    /// The core's ChaCha20-Poly1305 tag (kernel/poly1305.c, RFC 8439 2.8).
+    fn cc20_poly1305_aead(otk: *const u8, aad: *const u8, aad_len: usize, ct: *const u8, ct_len: usize, tag: *mut u8);
 }
 
 /// The NAS has no trusted wall clock. Time is only used by rustls for ticket
@@ -228,11 +229,11 @@ enum Cipher {
     Aes(aes_gcm::Aes128Gcm),
 }
 
-/// ChaCha20-Poly1305 (RFC 8439 2.8): the keystream from the core's cc20_xor
-/// (vector code), Poly1305 from RustCrypto. The one-time Poly1305 key is
-/// block 0 of the keystream, the data uses blocks 1 onwards; the tag covers
-/// aad, ciphertext and both lengths, and is checked in constant time before
-/// anything is decrypted.
+/// ChaCha20-Poly1305 (RFC 8439 2.8), both from the core's module "chacha":
+/// the keystream (cc20_xor, vector code) and Poly1305 (cc20_poly1305_aead,
+/// 64-bit limbs). The one-time Poly1305 key is block 0 of the keystream, the
+/// data uses blocks 1 onwards; the tag covers aad, ciphertext and both
+/// lengths, and is checked in constant time before anything is decrypted.
 struct ChaChaPoly {
     key: [u8; 32],
 }
@@ -255,34 +256,26 @@ impl ChaChaPoly {
         unsafe { cc20_xor(self.key.as_ptr(), nonce.as_ptr(), counter, data.as_mut_ptr(), data.len()) }
     }
 
-    fn mac(&self, nonce: &[u8; 12]) -> poly1305::Poly1305 {
+    fn tag(&self, nonce: &[u8; 12], aad: &[u8], ct: &[u8]) -> [u8; 16] {
         let mut otk = [0u8; 32];
         self.xor(nonce, 0, &mut otk);
-        let m = poly1305::Poly1305::new(poly1305::Key::from_slice(&otk));
+        let mut t = [0u8; 16];
+        // SAFETY: every pointer is valid for the length passed with it.
+        unsafe { cc20_poly1305_aead(otk.as_ptr(), aad.as_ptr(), aad.len(), ct.as_ptr(), ct.len(), t.as_mut_ptr()) };
         otk.zeroize();
-        m
-    }
-
-    fn tag(&self, nonce: &[u8; 12], aad: &[u8], ct: &[u8]) -> poly1305::Poly1305 {
-        let mut m = self.mac(nonce);
-        m.update_padded(aad);
-        m.update_padded(ct);
-        let mut lens = poly1305::Block::default();
-        lens[..8].copy_from_slice(&(aad.len() as u64).to_le_bytes());
-        lens[8..].copy_from_slice(&(ct.len() as u64).to_le_bytes());
-        m.update(&[lens]);
-        m
+        t
     }
 
     fn seal(&self, nonce: &[u8; 12], aad: &[u8], buf: &mut [u8]) -> [u8; 16] {
         self.xor(nonce, 1, buf);
-        let mut t = [0u8; 16];
-        t.copy_from_slice(&self.tag(nonce, aad, buf).finalize());
-        t
+        self.tag(nonce, aad, buf)
     }
 
     fn open(&self, nonce: &[u8; 12], aad: &[u8], buf: &mut [u8], tag: &[u8; 16]) -> bool {
-        if self.tag(nonce, aad, buf).verify(tag.into()).is_err() {
+        let mut t = self.tag(nonce, aad, buf);
+        let ok = yesos_core::crypto::yc_ct_eq(t.as_ptr(), tag.as_ptr(), 16) == 1;
+        t.zeroize();
+        if !ok {
             return false;
         }
         self.xor(nonce, 1, buf);
