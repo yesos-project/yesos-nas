@@ -924,10 +924,23 @@ struct TcpConn {
 
 pub(crate) const HTTPS_PORT: u16 = 8443;
 
-fn wipe_vec(v: &mut Vec<u8>) {
-    for b in v.iter_mut() {
+/// Zeroes `buf` with volatile stores the compiler cannot remove: 64-bit words
+/// where aligned, single bytes at the edges.
+pub(crate) fn wipe(buf: &mut [u8]) {
+    // SAFETY: every bit pattern is a valid u64, and align_to_mut keeps the
+    // middle part aligned.
+    let (head, words, tail) = unsafe { buf.align_to_mut::<u64>() };
+    for b in head.iter_mut().chain(tail.iter_mut()) {
         unsafe { core::ptr::write_volatile(b, 0) };
     }
+    for w in words.iter_mut() {
+        unsafe { core::ptr::write_volatile(w, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+fn wipe_vec(v: &mut Vec<u8>) {
+    wipe(v);
     v.clear();
     v.shrink_to_fit();
 }
@@ -951,9 +964,7 @@ fn conn_write_app(c: &mut TcpConn, data: &[u8], final_: bool) {
 
 impl Drop for TcpConn {
     fn drop(&mut self) {
-        for b in self.rx.iter_mut() {
-            unsafe { core::ptr::write_volatile(b, 0) };
-        }
+        wipe(&mut self.rx);
     }
 }
 
@@ -1079,7 +1090,8 @@ fn decode_chunked(body: &[u8]) -> Option<Vec<u8>> {
 
 enum RxState {
     Incomplete { send_continue: bool },
-    Complete(Vec<u8>),
+    Complete(Vec<u8>),          // a chunked body, decoded into a new buffer
+    CompleteAt(usize),          // the request is rx[..n]
     TooLarge,
 }
 
@@ -1111,7 +1123,7 @@ fn request_state(rx: &[u8], continue_sent: bool) -> RxState {
         return RxState::TooLarge;
     }
     if body.len() >= want {
-        return RxState::Complete(rx[..hdr_end + want].to_vec());
+        return RxState::CompleteAt(hdr_end + want);
     }
     RxState::Incomplete { send_continue: expect && !continue_sent && body.is_empty() }
 }
@@ -1258,9 +1270,7 @@ pub extern "C" fn rust_handle_tcp(buf: *const u8, len: usize, ip_hdr_len: usize)
                         let failed = t.failed;
                         c.tx.extend_from_slice(&out);
                         c.rx.extend_from_slice(&plain);
-                        for b in plain.iter_mut() {
-                            unsafe { core::ptr::write_volatile(b, 0) };
-                        }
+                        wipe(&mut plain);
                         if failed {
                             // Alert (if any) goes out, then the connection closes.
                             c.request_taken = true;
@@ -1282,6 +1292,14 @@ pub extern "C" fn rust_handle_tcp(buf: *const u8, len: usize, ip_hdr_len: usize)
                             c.request_taken = true;
                             wipe_vec(&mut c.rx);
                             request = Some(req);
+                        }
+                        RxState::CompleteAt(n) => {
+                            // The buffer itself becomes the request (no copy);
+                            // anything after it is wiped first.
+                            c.request_taken = true;
+                            wipe(&mut c.rx[n..]);
+                            c.rx.truncate(n);
+                            request = Some(core::mem::take(&mut c.rx));
                         }
                         RxState::TooLarge => {
                             c.request_taken = true;

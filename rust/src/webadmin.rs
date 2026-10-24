@@ -65,9 +65,7 @@ const ACTIONS: [&str; 17] = ["fs_check", "export_begin", "import_begin", "user_a
 const FIELD_MAX: usize = 256;   // RedSea names are up to 223 bytes (snapshot restore paths)
 
 fn wipe(b: &mut [u8]) {
-    for x in b.iter_mut() {
-        unsafe { core::ptr::write_volatile(x, 0) };
-    }
+    crate::http::wipe(b);
 }
 
 fn send(ip: [u8; 4], port: u16, status: &str, ctype: &str, extra: &str, body: &[u8]) {
